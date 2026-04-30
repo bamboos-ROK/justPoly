@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod +x /Users/choiyongrok/Desktop/simplify_justin/setup.sh)"
+    ]
+  }
+}
