@@ -20,6 +20,9 @@ def parse_args():
     parser.add_argument("--bake-margin", type=int, default=16)
     parser.add_argument("--ray-factor", type=float, default=0.01)
     parser.add_argument("--samples", type=int, default=64)
+    parser.add_argument("--skip-high-poly-cleanup", action="store_true")
+    parser.add_argument("--cage-factor", type=float, default=0.005)
+    parser.add_argument("--skip-cage", action="store_true")
     return parser.parse_args(argv)
 
 
@@ -57,6 +60,20 @@ def load_simple_obj(path: str, name: str):
     return obj
 
 
+# ── UV 전략 ───────────────────────────────────────────────────────────────────
+
+def _uv_smart_project(obj, angle_deg, margin):
+    """Smart UV Project: island 다수이나 항상 0-1 범위 내 패킹 보장."""
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.smart_project(
+        angle_limit=math.radians(angle_deg),
+        island_margin=margin,
+        area_weight=1.0,
+    )
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
 def create_uv(obj, angle_deg: float, margin: float):
     bpy.ops.object.select_all(action="DESELECT")
     obj.select_set(True)
@@ -66,18 +83,7 @@ def create_uv(obj, angle_deg: float, margin: float):
         obj.data.uv_layers.new(name="BakedUV")
     obj.data.uv_layers.active = obj.data.uv_layers[0]
 
-    bpy.ops.object.mode_set(mode="EDIT")
-    bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.uv.smart_project(
-        angle_limit=math.radians(angle_deg),
-        island_margin=margin,
-        area_weight=0.0,
-    )
-    try:
-        bpy.ops.uv.pack_islands(margin=margin)
-    except Exception:
-        pass
-    bpy.ops.object.mode_set(mode="OBJECT")
+    _uv_smart_project(obj, angle_deg, margin)
 
 
 def bbox_diag(objects):
@@ -99,20 +105,40 @@ def bbox_diag(objects):
     return (maxs - mins).length
 
 
+# ── High Poly Cleanup ────────────────────────────────────────────────────────
+
+def cleanup_high_poly(high_objs, skip=False):
+    if skip:
+        print("[Cleanup] 건너뜀 (--skip-high-poly-cleanup)")
+        return
+    for obj in high_objs:
+        if obj.type != "MESH":
+            continue
+        bpy.ops.object.select_all(action="DESELECT")
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+        try:
+            bpy.ops.object.mode_set(mode="EDIT")
+            bpy.ops.mesh.select_all(action="SELECT")
+            bpy.ops.mesh.remove_doubles(threshold=0.0001)
+            bpy.ops.mesh.delete_loose(use_verts=True, use_edges=True, use_faces=False)
+            bpy.ops.mesh.normals_make_consistent(inside=False)
+        finally:
+            bpy.ops.object.mode_set(mode="OBJECT")
+        print(f"[Cleanup] {obj.name} 완료")
+
+
+# ── Bake 전략 ─────────────────────────────────────────────────────────────────
+
 def create_bake_material(low_obj, image):
+    """베이크 중 순환 의존성 방지: 이미지 노드는 active만 유지, BSDF 연결은 베이크 후 수행."""
     mat = bpy.data.materials.new("BakedMaterial")
     mat.use_nodes = True
 
     nodes = mat.node_tree.nodes
-    links = mat.node_tree.links
-
-    bsdf = next((n for n in nodes if n.type == 'BSDF_PRINCIPLED'), None)
     tex = nodes.new(type="ShaderNodeTexImage")
     tex.name = "BakedBaseColor"
     tex.image = image
-
-    if bsdf:
-        links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
 
     low_obj.data.materials.clear()
     low_obj.data.materials.append(mat)
@@ -123,28 +149,68 @@ def create_bake_material(low_obj, image):
     nodes.active = tex
 
 
-def bake_basecolor(high_objs, low_obj, image, baked_png, bake_margin, max_ray_distance, samples):
-    bpy.context.scene.render.engine = "CYCLES"
-    bpy.context.scene.cycles.samples = samples
+def _connect_baked_image(low_obj):
+    """베이크 완료 후 이미지를 Base Color에 연결 (GLB export용)."""
+    mat = low_obj.data.materials[0]
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+    bsdf = next((n for n in nodes if n.type == "BSDF_PRINCIPLED"), None)
+    tex = nodes.get("BakedBaseColor")
+    if bsdf and tex:
+        links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
 
-    create_bake_material(low_obj, image)
 
+def _bake_diffuse(high_objs, low_obj, max_ray_distance, bake_margin,
+                  use_cage=False, cage_extrusion=0.0):
+    """DIFFUSE + COLOR pass: 재질 조작 없이 high poly albedo를 직접 베이크."""
     bpy.ops.object.select_all(action="DESELECT")
     for obj in high_objs:
         obj.select_set(True)
-
     low_obj.select_set(True)
     bpy.context.view_layer.objects.active = low_obj
 
-    # BaseColor 중심 bake.
-    # 복잡한 material node가 있으면 DIFFUSE COLOR 대신 EMIT bake 방식으로 확장 가능.
-    bpy.ops.object.bake(
+    bake_kwargs = dict(
         type="DIFFUSE",
         pass_filter={"COLOR"},
         use_selected_to_active=True,
         max_ray_distance=max_ray_distance,
         margin=bake_margin,
     )
+    if use_cage and cage_extrusion > 0:
+        bake_kwargs["use_cage"] = True
+        bake_kwargs["cage_extrusion"] = cage_extrusion
+
+    try:
+        result = bpy.ops.object.bake(**bake_kwargs)
+        if "FINISHED" not in result:
+            raise RuntimeError(f"bake returned: {result}")
+        print("[Bake] 완료" + (" (cage)" if use_cage else ""))
+    except Exception as e:
+        if use_cage:
+            print(f"[Bake] Cage bake 실패: {e} — fallback")
+            bpy.ops.object.bake(
+                type="DIFFUSE",
+                pass_filter={"COLOR"},
+                use_selected_to_active=True,
+                max_ray_distance=max_ray_distance,
+                margin=bake_margin,
+            )
+        else:
+            raise
+
+
+def bake_basecolor(high_objs, low_obj, image, baked_png, bake_margin, max_ray_distance, samples,
+                   skip_high_poly_cleanup=False, use_cage=False, cage_extrusion=0.0):
+    bpy.context.scene.render.engine = "CYCLES"
+    bpy.context.scene.cycles.samples = samples
+
+    cleanup_high_poly(high_objs, skip=skip_high_poly_cleanup)
+    create_bake_material(low_obj, image)
+
+    _bake_diffuse(high_objs, low_obj, max_ray_distance, bake_margin,
+                  use_cage=use_cage, cage_extrusion=cage_extrusion)
+
+    _connect_baked_image(low_obj)
 
     image.filepath_raw = baked_png
     image.file_format = "PNG"
@@ -193,8 +259,9 @@ def main():
 
     diag = bbox_diag(high_objs + [low_obj])
     max_ray_distance = diag * args.ray_factor
+    cage_extrusion = max(diag * args.cage_factor, 1e-5)
 
-    print(f"Ray distance: {max_ray_distance}")
+    print(f"[Main] diag={diag:.4f}, ray={max_ray_distance:.6f}, cage={cage_extrusion:.6f}")
 
     bake_basecolor(
         high_objs=high_objs,
@@ -204,6 +271,9 @@ def main():
         bake_margin=args.bake_margin,
         max_ray_distance=max_ray_distance,
         samples=args.samples,
+        skip_high_poly_cleanup=args.skip_high_poly_cleanup,
+        use_cage=not args.skip_cage,
+        cage_extrusion=cage_extrusion,
     )
 
     export_glb(low_obj, args.output_glb)

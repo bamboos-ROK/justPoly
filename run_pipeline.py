@@ -32,6 +32,8 @@ def main():
     parser.add_argument("--texture-size", type=int, default=None)
     parser.add_argument("--tris-ratio", type=float, default=0.1)
     parser.add_argument("--texture-ratio", type=float, default=0.5)
+    parser.add_argument("--skip-high-poly-cleanup", action="store_true")
+    parser.add_argument("--skip-cage", action="store_true")
     parser.add_argument("--blender", default="blender")
     parser.add_argument("--workdir", default="_glb_opt_work")
     args = parser.parse_args()
@@ -82,7 +84,7 @@ def main():
 
     require_file(low_obj, "Low-poly OBJ")
 
-    run([
+    bake_cmd = [
         args.blender, "-b",
         "--python", str(Path("bake_export.py").resolve()),
         "--",
@@ -91,7 +93,14 @@ def main():
         "--output-glb", str(output_glb),
         "--baked-png", str(baked_png),
         "--texture-size", str(args.texture_size),
-    ])
+    ]
+    
+    if args.skip_high_poly_cleanup:
+        bake_cmd.append("--skip-high-poly-cleanup")
+    if args.skip_cage:
+        bake_cmd.append("--skip-cage")
+
+    run(bake_cmd)
 
     require_file(output_glb, "Output GLB")
 
