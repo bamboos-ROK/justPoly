@@ -31,7 +31,10 @@ export function GLBInspector({
   const afterHandle = useRef<ViewerHandle | null>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
 
-  useSyncCamera(syncCam, beforeHandle.current?.controls, afterHandle.current?.controls);
+  const [beforeControls, setBeforeControls] = useState<ViewerHandle['controls'] | null>(null);
+  const [afterControls, setAfterControls] = useState<ViewerHandle['controls'] | null>(null);
+
+  useSyncCamera(syncCam, beforeControls, afterControls);
 
   useEffect(() => {
     if (!open || !onClose) return;
@@ -82,6 +85,7 @@ export function GLBInspector({
               showBBox={showBBox}
               onReady={(h) => {
                 beforeHandle.current = h;
+                setBeforeControls(h.controls);
               }}
             />
             <div style={styles.divider} />
@@ -92,6 +96,7 @@ export function GLBInspector({
               showBBox={showBBox}
               onReady={(h) => {
                 afterHandle.current = h;
+                setAfterControls(h.controls);
               }}
             />
           </div>
