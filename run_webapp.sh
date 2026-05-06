@@ -11,16 +11,6 @@ info()  { echo "  $1"; }
 ok()    { echo "  ✓ $1"; }
 step()  { echo; echo "▶ $1"; }
 
-# ── Python 감지 ──────────────────────────────────────────────────────────────
-detect_python() {
-  for cmd in python3.12 python3.11 python3.10 python3; do
-    if command -v "$cmd" &>/dev/null; then
-      echo "$cmd"; return
-    fi
-  done
-  echo ""
-}
-
 # ── Blender 설치 확인 ───────────────────────────────────────────────────────
 step "Blender 설치 확인 중..."
 
@@ -58,6 +48,16 @@ fi
 
 export BLENDER_PATH="$BLENDER"
 ok "Blender 확인 완료: $BLENDER"
+
+# ── Python 감지 ──────────────────────────────────────────────────────────────
+detect_python() {
+  for cmd in python3.12 python3.11 python3.10 python3; do
+    if command -v "$cmd" &>/dev/null; then
+      echo "$cmd"; return
+    fi
+  done
+  echo ""
+}
 
 # ── 백엔드 의존성 체크 ───────────────────────────────────────────────────────
 step "백엔드 의존성 확인 중..."
