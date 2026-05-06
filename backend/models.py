@@ -28,7 +28,7 @@ class PipelineStep(BaseModel):
 
 class JobStatus(BaseModel):
     job_id: str
-    status: Literal["uploading", "running", "done", "error"]
+    status: Literal["uploading", "uploaded", "queued", "running", "done", "error"]
     step: Optional[str] = None
     steps: list[PipelineStep]
     input_filename: str

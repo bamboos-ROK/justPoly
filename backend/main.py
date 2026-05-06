@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .routers import upload, jobs, files
+from .services import pipeline as pipeline_service
 
 app = FastAPI(title="GLB Optimizer API")
 
@@ -23,6 +24,7 @@ async def startup() -> None:
     settings.output_dir.mkdir(parents=True, exist_ok=True)
     app.mount("/files/staging", StaticFiles(directory=str(settings.staging_dir)), name="staging")
     app.mount("/files/output", StaticFiles(directory=str(settings.output_dir)), name="output")
+    await pipeline_service.start_worker()
 
 
 app.include_router(upload.router)

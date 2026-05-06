@@ -12,6 +12,9 @@ from ..models import JobStatus, PipelineParams, PipelineStep
 from ..utils import output_file_name
 
 _jobs: dict[str, JobStatus] = {}
+_queue: asyncio.Queue[str] = asyncio.Queue()
+_pending_params: dict[str, PipelineParams] = {}
+_worker_task: asyncio.Task | None = None
 
 # stdout 패턴 → step index 매핑
 _STEP_MARKERS = {
@@ -43,6 +46,30 @@ def create_job(job_id: str, input_filename: str) -> JobStatus:
     )
     _jobs[job_id] = job
     return job
+
+
+def enqueue_job(job_id: str, params: PipelineParams) -> None:
+    job = _jobs[job_id]
+    job.status = "queued"
+    _pending_params[job_id] = params
+    _queue.put_nowait(job_id)
+
+
+async def start_worker() -> None:
+    global _worker_task
+    _worker_task = asyncio.create_task(_worker_loop())
+
+
+async def _worker_loop() -> None:
+    while True:
+        job_id = await _queue.get()
+        params = _pending_params.pop(job_id, PipelineParams())
+        try:
+            await run_pipeline_async(job_id, params)
+        except Exception:
+            pass
+        finally:
+            _queue.task_done()
 
 
 async def run_pipeline_async(job_id: str, params: PipelineParams) -> None:

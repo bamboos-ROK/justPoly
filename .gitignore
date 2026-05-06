@@ -19,8 +19,7 @@ backend/.venv/
 .pytest_cache/
 
 # ── Backend 업로드/결과 파일 ──────────────────────────────────
-backend/input/
-backend/output/
+backend/data
 
 # ── Frontend (Node / Vite) ────────────────────────────────────
 frontend/node_modules/

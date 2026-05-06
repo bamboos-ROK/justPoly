@@ -2,7 +2,10 @@ import { NavLink } from 'react-router-dom'
 import { useStore } from '../store'
 
 export function Sidebar() {
-  const activeJob = useStore((s) => s.activeJob)
+  const jobsById = useStore((s) => s.jobsById)
+  const hasActive = Object.values(jobsById).some(
+    (j) => j.status === 'running' || j.status === 'queued'
+  )
 
   return (
     <aside style={styles.sidebar}>
@@ -11,9 +14,7 @@ export function Sidebar() {
         <NavLink to="/progress" style={navStyle}>
           <span style={styles.icon}>⚙</span>
           On Progress
-          {activeJob && activeJob.status === 'running' && (
-            <span style={styles.badge} />
-          )}
+          {hasActive && <span style={styles.badge} />}
         </NavLink>
         <NavLink to="/outputs" style={navStyle}>
           <span style={styles.icon}>◎</span>

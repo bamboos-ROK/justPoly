@@ -1,41 +1,67 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api'
+import { FileJobCard } from '../components/FileJobCard'
 import { GLBInspector } from '../components/GLBInspector'
-import { ProgressCard } from '../components/ProgressCard'
 import { UploadZone } from '../components/UploadZone'
 import { useStore } from '../store'
-import type { PipelineParams } from '../types'
+import type { PipelineParams, UploadItem } from '../types'
+
+const MAX_FILES = 10
+const MAX_FILE_SIZE = 300 * 1024 * 1024  // 300MB
+const MAX_CONCURRENT_UPLOADS = 3
 
 export function OnProgressPage() {
-  const { activeJob, setActiveJob, updateJob, setPollingId } = useStore()
+  const {
+    uploadItems, setUploadItems, updateUploadItem,
+    jobsById, mergeJobs,
+    selectedJobId, setSelectedJobId,
+    setPollingId,
+  } = useStore()
 
-  const [uploadPct, setUploadPct] = useState<number | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [uploadedFile, setUploadedFile] = useState<{ job_id: string; filename: string } | null>(null)
   const [inspectorOpen, setInspectorOpen] = useState(false)
+  const [startingAll, setStartingAll] = useState(false)
   const [params, setParams] = useState<Partial<PipelineParams>>({
     tris_ratio: 0.1,
     texture_ratio: 0.5,
     skip_high_poly_cleanup: false,
     skip_cage: false,
   })
+
+  const uploadQueueRef = useRef<string[]>([])
+  const runningCountRef = useRef(0)
+  // uploadItems는 store에 있지만 드레인 함수에서 최신 값 참조가 필요
+  const uploadItemsRef = useRef<UploadItem[]>(uploadItems)
+  useEffect(() => { uploadItemsRef.current = uploadItems }, [uploadItems])
+
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  function startPolling(job_id: string) {
-    if (pollingRef.current) clearInterval(pollingRef.current)
+  // 폴링 시작
+  function startPolling() {
+    if (pollingRef.current) return
     const id = setInterval(async () => {
       try {
-        const job = await api.getJob(job_id)
-        updateJob(job)
-        if (job.status === 'done' || job.status === 'error') {
-          clearInterval(id)
-          pollingRef.current = null
-        }
+        const jobs = await api.listJobs()
+        mergeJobs(jobs)
       } catch (_) { /* ignore */ }
     }, 2000)
     pollingRef.current = id
     setPollingId(id)
   }
+
+  // 폴링 중지 조건 확인
+  useEffect(() => {
+    const itemsWithJob = uploadItems.filter((i) => i.job_id)
+    if (itemsWithJob.length === 0) return
+    const allDone = itemsWithJob.every((i) => {
+      const job = i.job_id ? jobsById[i.job_id] : undefined
+      return job?.status === 'done' || job?.status === 'error'
+    })
+    if (allDone && pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+      setPollingId(null)
+    }
+  }, [jobsById, uploadItems, setPollingId])
 
   useEffect(() => {
     return () => {
@@ -43,51 +69,128 @@ export function OnProgressPage() {
     }
   }, [])
 
-  async function handleFile(file: File) {
-    setBusy(true)
-    setUploadPct(0)
-    setActiveJob(null)
-    setUploadedFile(null)
-    try {
-      const { job_id } = await api.uploadGLB(file, setUploadPct)
-      setUploadedFile({ job_id, filename: file.name })
-    } catch (e) {
-      alert(`오류: ${(e as Error).message}`)
-    } finally {
-      setBusy(false)
-      setUploadPct(null)
+  const uploadOne = useCallback((local_id: string) => {
+    const item = uploadItemsRef.current.find((i) => i.local_id === local_id)
+    if (!item) {
+      runningCountRef.current--
+      drainQueue()
+      return
+    }
+
+    updateUploadItem(local_id, { upload_status: 'uploading', upload_progress: 0 })
+
+    api.uploadGLB(item.file, (pct) => {
+      updateUploadItem(local_id, { upload_progress: pct })
+    })
+      .then(({ job_id, input_url }) => {
+        updateUploadItem(local_id, { upload_status: 'uploaded', upload_progress: 100, job_id, input_url })
+        startPolling()
+      })
+      .catch((e) => {
+        updateUploadItem(local_id, { upload_status: 'error', error: (e as Error).message })
+      })
+      .finally(() => {
+        runningCountRef.current--
+        drainQueue()
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [updateUploadItem])
+
+  function drainQueue() {
+    while (runningCountRef.current < MAX_CONCURRENT_UPLOADS && uploadQueueRef.current.length > 0) {
+      const local_id = uploadQueueRef.current.shift()!
+      runningCountRef.current++
+      uploadOne(local_id)
     }
   }
 
-  async function handleStartPipeline() {
-    if (!uploadedFile) return
-    setBusy(true)
+  function handleFiles(files: File[]) {
+    const glbFiles = files.filter((f) => f.name.toLowerCase().endsWith('.glb'))
+    const validFiles = glbFiles.filter((f) => f.size <= MAX_FILE_SIZE)
+    const oversized = glbFiles.length - validFiles.length
+    const nonGlb = files.length - glbFiles.length
+
+    const messages: string[] = []
+    if (nonGlb > 0) messages.push(`${nonGlb}개 파일은 .glb 형식이 아니어서 제외되었습니다.`)
+    if (oversized > 0) messages.push(`${oversized}개 파일이 300MB를 초과하여 제외되었습니다.`)
+
+    const currentCount = uploadItemsRef.current.length
+    const available = MAX_FILES - currentCount
+    if (available <= 0) {
+      alert(`이미 최대 ${MAX_FILES}개 파일이 등록되어 있습니다.`)
+      return
+    }
+
+    const toAdd = validFiles.slice(0, available)
+    if (validFiles.length > available) {
+      messages.push(`${validFiles.length - available}개 파일이 최대 ${MAX_FILES}개 제한으로 제외되었습니다.`)
+    }
+
+    if (messages.length > 0) alert(messages.join('\n'))
+    if (toAdd.length === 0) return
+
+    const newItems: UploadItem[] = toAdd.map((file) => ({
+      local_id: crypto.randomUUID(),
+      file,
+      filename: file.name,
+      size_bytes: file.size,
+      upload_status: 'pending',
+      upload_progress: 0,
+    }))
+
+    const fullItems = [...uploadItemsRef.current, ...newItems]
+    uploadItemsRef.current = fullItems
+    setUploadItems(fullItems)
+    for (const item of newItems) uploadQueueRef.current.push(item.local_id)
+    drainQueue()
+  }
+
+  async function handleStartAll() {
+    const toStart = uploadItems.filter((i) => {
+      if (!i.job_id) return false
+      const job = jobsById[i.job_id]
+      return job?.status === 'uploaded'
+    })
+    if (toStart.length === 0) return
+    setStartingAll(true)
     try {
-      const job = await api.startPipeline(uploadedFile.job_id, params)
-      setActiveJob({ ...job, input_filename: uploadedFile.filename })
-      startPolling(uploadedFile.job_id)
+      await Promise.all(toStart.map((i) => api.startPipeline(i.job_id!, params)))
+      const jobs = await api.listJobs()
+      mergeJobs(jobs)
     } catch (e) {
       alert(`오류: ${(e as Error).message}`)
     } finally {
-      setBusy(false)
+      setStartingAll(false)
     }
   }
 
-  const isRunning = activeJob?.status === 'running'
-  const canStartPipeline = Boolean(uploadedFile) && !busy && !isRunning
+  function handleClearAll() {
+    const anyUploading = uploadItems.some((i) => i.upload_status === 'uploading')
+    if (anyUploading) return
+    uploadQueueRef.current = []
+    setUploadItems([])
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+      setPollingId(null)
+    }
+  }
+
+  const readyToStartCount = uploadItems.filter((i) => {
+    if (!i.job_id) return false
+    return jobsById[i.job_id]?.status === 'uploaded'
+  }).length
+
+  const anyUploading = uploadItems.some((i) => i.upload_status === 'uploading')
+  const isRunning = Object.values(jobsById).some((j) => j.status === 'running')
+
+  const selectedJob = selectedJobId ? jobsById[selectedJobId] : null
 
   return (
     <div style={styles.page}>
       <h1 style={styles.title}>On Progress</h1>
 
-      <UploadZone onFile={handleFile} disabled={busy || isRunning} />
-
-      {uploadPct !== null && (
-        <div style={styles.uploadBar}>
-          <div style={{ ...styles.uploadFill, width: `${uploadPct}%` }} />
-          <span style={styles.uploadText}>{Math.round(uploadPct)}% 업로드 중...</span>
-        </div>
-      )}
+      <UploadZone onFiles={handleFiles} disabled={anyUploading || isRunning} />
 
       {/* 파라미터 설정 */}
       {!isRunning && (
@@ -131,46 +234,62 @@ export function OnProgressPage() {
         </div>
       )}
 
-      {uploadedFile && !activeJob && (
-        <div style={styles.readyBox}>
-          <div>
-            <div style={styles.readyTitle}>업로드 완료</div>
-            <div style={styles.readyFilename}>{uploadedFile.filename}</div>
-          </div>
+      {/* 액션 버튼 영역 */}
+      {uploadItems.length > 0 && (
+        <div style={styles.actionRow}>
           <button
             style={{
               ...styles.startBtn,
-              ...(canStartPipeline ? {} : styles.disabledBtn),
+              ...(readyToStartCount === 0 || startingAll ? styles.disabledBtn : {}),
             }}
-            onClick={handleStartPipeline}
-            disabled={!canStartPipeline}
+            onClick={handleStartAll}
+            disabled={readyToStartCount === 0 || startingAll}
           >
-            {busy ? '준비 중...' : '경량화 시작'}
+            {startingAll ? '등록 중...' : `경량화 시작 (${readyToStartCount}개)`}
+          </button>
+          <button
+            style={{
+              ...styles.clearBtn,
+              ...(anyUploading ? styles.disabledBtn : {}),
+            }}
+            onClick={handleClearAll}
+            disabled={anyUploading}
+          >
+            모두 지우기
           </button>
         </div>
       )}
 
-      {activeJob && (
-        <div style={{ marginTop: 24 }}>
-          <ProgressCard job={activeJob} />
-          {activeJob.status === 'done' && (
-            <button
-              style={styles.viewBtn}
-              onClick={() => setInspectorOpen(true)}
-            >
-              결과 비교 보기 →
-            </button>
-          )}
+      {/* 파일 카드 리스트 */}
+      {uploadItems.length > 0 && (
+        <div style={styles.cardList}>
+          {uploadItems.map((item) => {
+            const job = item.job_id ? jobsById[item.job_id] : undefined
+            return (
+              <FileJobCard
+                key={item.local_id}
+                item={item}
+                job={job}
+                onViewResult={(job_id) => {
+                  setSelectedJobId(job_id)
+                  setInspectorOpen(true)
+                }}
+              />
+            )
+          })}
         </div>
       )}
 
-      {activeJob?.status === 'done' && (
+      {selectedJob?.status === 'done' && (
         <GLBInspector
           open={inspectorOpen}
-          title={activeJob.input_filename}
-          inputUrl={`/files/staging/${activeJob.job_id}.glb`}
-          outputUrl={activeJob.output_url || `/files/output/${activeJob.job_id}.glb`}
-          onClose={() => setInspectorOpen(false)}
+          title={selectedJob.input_filename}
+          inputUrl={`/files/staging/${selectedJob.job_id}.glb`}
+          outputUrl={selectedJob.output_url ?? `/files/output/${selectedJob.job_id}.glb`}
+          onClose={() => {
+            setInspectorOpen(false)
+            setSelectedJobId(null)
+          }}
         />
       )}
     </div>
@@ -178,32 +297,8 @@ export function OnProgressPage() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  page: { padding: 32, maxWidth: 680 },
+  page: { padding: 32, maxWidth: 720 },
   title: { fontSize: 22, fontWeight: 700, marginBottom: 24, color: '#f1f5f9' },
-  uploadBar: {
-    position: 'relative',
-    height: 32,
-    background: '#1e293b',
-    borderRadius: 6,
-    marginTop: 12,
-    overflow: 'hidden',
-  },
-  uploadFill: {
-    position: 'absolute',
-    inset: 0,
-    right: 'auto',
-    background: '#6366f1',
-    transition: 'width 0.2s',
-  },
-  uploadText: {
-    position: 'absolute',
-    inset: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 12,
-    color: '#e2e8f0',
-  },
   paramBox: {
     background: '#1e293b',
     border: '1px solid #334155',
@@ -232,30 +327,11 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#94a3b8',
     cursor: 'pointer',
   },
-  readyBox: {
+  actionRow: {
     marginTop: 20,
-    background: '#1e293b',
-    border: '1px solid #334155',
-    borderRadius: 10,
-    padding: '16px 20px',
     display: 'flex',
+    gap: 12,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 16,
-  },
-  readyTitle: {
-    fontSize: 13,
-    fontWeight: 700,
-    color: '#e2e8f0',
-    marginBottom: 4,
-  },
-  readyFilename: {
-    fontSize: 12,
-    color: '#94a3b8',
-    maxWidth: 360,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
   },
   startBtn: {
     padding: '10px 18px',
@@ -266,21 +342,25 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 14,
     fontWeight: 700,
     cursor: 'pointer',
-    flexShrink: 0,
   },
-  disabledBtn: {
-    opacity: 0.55,
-    cursor: 'not-allowed',
-  },
-  viewBtn: {
-    marginTop: 16,
-    padding: '10px 20px',
-    background: '#6366f1',
-    color: '#fff',
+  clearBtn: {
+    padding: '10px 18px',
+    background: '#334155',
+    color: '#94a3b8',
     border: 'none',
     borderRadius: 8,
     fontSize: 14,
-    fontWeight: 600,
+    fontWeight: 500,
     cursor: 'pointer',
+  },
+  disabledBtn: {
+    opacity: 0.45,
+    cursor: 'not-allowed',
+  },
+  cardList: {
+    marginTop: 20,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
   },
 }

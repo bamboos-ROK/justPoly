@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from ..models import JobStatus, StartPipelineRequest
 from ..services import pipeline
@@ -9,15 +9,15 @@ router = APIRouter()
 
 
 @router.post("/jobs", response_model=JobStatus)
-async def start_pipeline(body: StartPipelineRequest, bg: BackgroundTasks) -> JobStatus:
+async def start_pipeline(body: StartPipelineRequest) -> JobStatus:
     job = pipeline.get_job(body.job_id)
     if not job:
         raise HTTPException(404, "job_id not found. Upload first.")
-    if job.status != "uploading":
+    if job.status not in ("uploaded",):
         raise HTTPException(409, f"Job already in status: {job.status}")
 
-    bg.add_task(pipeline.run_pipeline_async, body.job_id, body.params)
-    return job
+    pipeline.enqueue_job(body.job_id, body.params)
+    return pipeline.get_job(body.job_id)  # type: ignore[return-value]
 
 
 @router.get("/jobs", response_model=list[JobStatus])

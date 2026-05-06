@@ -32,3 +32,7 @@ export function startPipeline(job_id: string, params: Partial<PipelineParams> = 
 export function getJob(job_id: string): Promise<Job> {
   return fetch(`/jobs/${job_id}`).then((r) => jsonFetch<Job>(r))
 }
+
+export function listJobs(): Promise<Job[]> {
+  return fetch('/jobs').then((r) => jsonFetch<Job[]>(r))
+}

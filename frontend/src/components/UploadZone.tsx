@@ -1,19 +1,19 @@
 import { useRef, useState } from 'react'
 
 interface Props {
-  onFile: (file: File) => void
+  onFiles: (files: File[]) => void
   disabled?: boolean
 }
 
-export function UploadZone({ onFile, disabled }: Props) {
+export function UploadZone({ onFiles, disabled }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault()
     setDragging(false)
-    const file = e.dataTransfer.files[0]
-    if (file) onFile(file)
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length > 0) onFiles(files)
   }
 
   return (
@@ -34,13 +34,18 @@ export function UploadZone({ onFile, disabled }: Props) {
         ref={inputRef}
         type="file"
         accept=".glb"
+        multiple
         style={{ display: 'none' }}
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f) }}
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? [])
+          if (files.length > 0) onFiles(files)
+          e.target.value = ''
+        }}
         disabled={disabled}
       />
       <div style={styles.icon}>↑</div>
       <div style={styles.text}>GLB 파일을 드래그하거나 클릭하여 선택</div>
-      <div style={styles.sub}>최대 100MB+, .glb 형식</div>
+      <div style={styles.sub}>최대 10개, 파일당 300MB, .glb 형식</div>
     </div>
   )
 }

@@ -1,5 +1,17 @@
 export type StepStatus = 'pending' | 'running' | 'done' | 'error'
-export type JobStatus = 'uploading' | 'running' | 'done' | 'error'
+export type JobStatus = 'uploading' | 'uploaded' | 'queued' | 'running' | 'done' | 'error'
+
+export interface UploadItem {
+  local_id: string
+  file: File
+  filename: string
+  size_bytes: number
+  upload_status: 'pending' | 'uploading' | 'uploaded' | 'error'
+  upload_progress: number
+  job_id?: string
+  input_url?: string
+  error?: string
+}
 
 export interface PipelineStep {
   name: string
