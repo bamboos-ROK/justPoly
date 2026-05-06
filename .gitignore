@@ -1,7 +1,49 @@
+# ── 3D 파이프라인 작업 폴더 ──────────────────────────────────
 input/
 output/
-
-.DS_Store
-
+staging/
 _glb_opt_work/
+
+# ── 환경 변수 ────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Python ───────────────────────────────────────────────────
 .venv/
+backend/.venv/
+**/__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# ── Backend 업로드/결과 파일 ──────────────────────────────────
+backend/input/
+backend/output/
+
+# ── Frontend (Node / Vite) ────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+*.local
+
+# ── 로그 ─────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ── 에디터 / OS ───────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

@@ -1,5 +1,6 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PYTHON="$SCRIPT_DIR/.venv/bin/python3"
+VENV="$SCRIPT_DIR/backend/.venv"
+PYTHON="$VENV/bin/python3"
 
 PYTHON3_BIN=$(command -v python3.11 || command -v python3.12 || command -v python3.10)
 if [ -z "$PYTHON3_BIN" ]; then
@@ -9,11 +10,11 @@ fi
 
 if [ ! -f "$PYTHON" ]; then
   echo "가상환경을 처음 설정합니다... ($PYTHON3_BIN)"
-  "$PYTHON3_BIN" -m venv "$SCRIPT_DIR/.venv"
-  "$SCRIPT_DIR/.venv/bin/pip" install --upgrade pip -q
+  "$PYTHON3_BIN" -m venv "$VENV"
+  "$VENV/bin/pip" install --upgrade pip -q
 fi
 
-"$SCRIPT_DIR/.venv/bin/pip" install -q -r "$SCRIPT_DIR/requirements.txt"
+"$VENV/bin/pip" install -q -r "$SCRIPT_DIR/backend/requirements.txt"
 
 files=(input/*.glb)
 
@@ -25,7 +26,7 @@ fi
 echo "처리할 파일을 선택하세요:"
 select f in "${files[@]}"; do
   if [ -n "$f" ]; then
-    "$PYTHON" run_pipeline.py \
+    "$PYTHON" "$SCRIPT_DIR/backend/scripts/run_pipeline.py" \
       --input "$f" \
       --output "output/simple_$(basename "$f")" \
       --blender /Applications/Blender.app/Contents/MacOS/Blender
