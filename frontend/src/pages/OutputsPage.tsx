@@ -3,11 +3,14 @@ import { api } from '../api';
 import { GLBInspector } from '../components/GLBInspector';
 import type { OutputFile } from '../types';
 import { fmtSize, fmtDate, fmtParams } from '../utils';
+import { useStore } from '../store';
 
 export function OutputsPage() {
   const [outputs, setOutputs] = useState<OutputFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedJob, setSelectedJob] = useState<OutputFile | null>(null);
+  const [deleting, setDeleting] = useState<Set<string>>(new Set());
+  const { removeJobData } = useStore();
 
   async function load() {
     try {
@@ -15,6 +18,24 @@ export function OutputsPage() {
       setOutputs(list);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleDelete(job_id: string) {
+    setDeleting((prev) => new Set(prev).add(job_id));
+    try {
+      await api.deleteOutput(job_id);
+      setOutputs((prev) => prev.filter((o) => o.job_id !== job_id));
+      removeJobData(job_id);
+      if (selectedJob?.job_id === job_id) setSelectedJob(null);
+    } catch (e) {
+      alert(`삭제 실패: ${(e as Error).message}`);
+    } finally {
+      setDeleting((prev) => {
+        const next = new Set(prev);
+        next.delete(job_id);
+        return next;
+      });
     }
   }
 
@@ -45,9 +66,21 @@ export function OutputsPage() {
                   </div>
                 )}
               </div>
-              <button style={styles.btn} onClick={() => setSelectedJob(o)}>
-                비교 보기
-              </button>
+              <div style={styles.btnGroup}>
+                <button style={styles.btn} onClick={() => setSelectedJob(o)}>
+                  비교 보기
+                </button>
+                <button
+                  style={{
+                    ...styles.deleteBtn,
+                    ...(deleting.has(o.job_id) ? styles.disabledBtn : {})
+                  }}
+                  onClick={() => handleDelete(o.job_id)}
+                  disabled={deleting.has(o.job_id)}
+                >
+                  {deleting.has(o.job_id) ? '삭제 중...' : '삭제'}
+                </button>
+              </div>
             </div>
           );
         })}
@@ -94,6 +127,11 @@ const styles: Record<string, React.CSSProperties> = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap'
   },
+  btnGroup: {
+    display: 'flex',
+    gap: 8,
+    flexShrink: 0
+  },
   btn: {
     padding: '8px 16px',
     background: '#6366f1',
@@ -102,7 +140,20 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 6,
     fontSize: 13,
     fontWeight: 600,
-    cursor: 'pointer',
-    flexShrink: 0
+    cursor: 'pointer'
+  },
+  deleteBtn: {
+    padding: '8px 16px',
+    background: '#ef4444',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 6,
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer'
+  },
+  disabledBtn: {
+    opacity: 0.45,
+    cursor: 'not-allowed'
   }
 };

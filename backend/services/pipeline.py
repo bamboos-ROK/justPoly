@@ -30,6 +30,11 @@ def get_job(job_id: str) -> Optional[JobStatus]:
     return _jobs.get(job_id)
 
 
+def delete_job(job_id: str) -> None:
+    _jobs.pop(job_id, None)
+    _pending_params.pop(job_id, None)
+
+
 def list_jobs() -> list[JobStatus]:
     return list(_jobs.values())
 

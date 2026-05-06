@@ -9,6 +9,7 @@ interface AppStore {
   setUploadItems: (items: UploadItem[]) => void
   updateUploadItem: (local_id: string, patch: Partial<UploadItem>) => void
   mergeJobs: (jobs: Job[]) => void
+  removeJobData: (job_id: string) => void
   setSelectedJobId: (id: string | null) => void
   setPollingId: (id: ReturnType<typeof setInterval> | null) => void
 }
@@ -34,6 +35,12 @@ export const useStore = create<AppStore>((set) => ({
       for (const j of jobs) next[j.job_id] = j
       return { jobsById: next }
     }),
+
+  removeJobData: (job_id) =>
+    set((s) => ({
+      jobsById: Object.fromEntries(Object.entries(s.jobsById).filter(([k]) => k !== job_id)),
+      uploadItems: s.uploadItems.filter((i) => i.job_id !== job_id),
+    })),
 
   setSelectedJobId: (id) => set({ selectedJobId: id }),
   setPollingId: (id) => set({ pollingId: id }),

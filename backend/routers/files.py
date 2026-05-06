@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from ..config import settings
 from ..models import OutputFile, PipelineParams
@@ -72,3 +72,18 @@ async def list_outputs() -> list[OutputFile]:
         )
 
     return sorted(results, key=lambda x: x.created_at, reverse=True)
+
+
+@router.delete("/outputs/{job_id}", status_code=204)
+async def delete_output(job_id: str) -> None:
+    output_glb = settings.output_dir / f"{job_id}.glb"
+    if not output_glb.exists():
+        raise HTTPException(404, "Output not found")
+    output_glb.unlink()
+    meta = output_glb.with_suffix(".json")
+    if meta.exists():
+        meta.unlink()
+    staging_glb = settings.staging_dir / f"{job_id}.glb"
+    if staging_glb.exists():
+        staging_glb.unlink()
+    pipeline.delete_job(job_id)
