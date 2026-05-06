@@ -68,7 +68,7 @@ export function OutputsPage() {
               </div>
               <div style={styles.btnGroup}>
                 <button style={styles.btn} onClick={() => setSelectedJob(o)}>
-                  비교 보기
+                  결과 보기
                 </button>
                 <button
                   style={{
