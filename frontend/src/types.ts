@@ -25,6 +25,7 @@ export interface Job {
   step: string | null
   steps: PipelineStep[]
   input_filename: string
+  params?: PipelineParams | null
   output_url: string | null
   error: string | null
   started_at: string | null
@@ -38,6 +39,7 @@ export interface OutputFile {
   output_url: string
   size_bytes: number
   created_at: string
+  params?: PipelineParams | null
 }
 
 export interface PipelineParams {

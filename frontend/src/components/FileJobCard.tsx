@@ -1,9 +1,10 @@
-import type { Job, UploadItem } from '../types'
+import type { Job, UploadItem } from '../types';
+import { fmtParams, formatBytes } from '../utils';
 
 interface FileJobCardProps {
-  item: UploadItem
-  job?: Job
-  onViewResult: (job_id: string) => void
+  item: UploadItem;
+  job?: Job;
+  onViewResult: (job_id: string) => void;
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -13,8 +14,8 @@ const STATUS_COLOR: Record<string, string> = {
   queued: '#f59e0b',
   running: '#22d3ee',
   done: '#22c55e',
-  error: '#ef4444',
-}
+  error: '#ef4444'
+};
 
 const STATUS_LABEL: Record<string, string> = {
   pending: '대기',
@@ -23,31 +24,31 @@ const STATUS_LABEL: Record<string, string> = {
   queued: '변환 대기',
   running: '변환 중',
   done: '완료',
-  error: '오류',
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
+  error: '오류'
+};
 
 export function FileJobCard({ item, job, onViewResult }: FileJobCardProps) {
-  const uploadStatus = item.upload_status
-  const convStatus = job?.status
-  const displayStatus = convStatus ?? uploadStatus
-  const color = STATUS_COLOR[displayStatus] ?? '#64748b'
-  const label = STATUS_LABEL[displayStatus] ?? displayStatus
+  const uploadStatus = item.upload_status;
+  const convStatus = job?.status;
+  const displayStatus = convStatus ?? uploadStatus;
+  const color = STATUS_COLOR[displayStatus] ?? '#64748b';
+  const label = STATUS_LABEL[displayStatus] ?? displayStatus;
 
   return (
     <div style={styles.card}>
       <div style={styles.header}>
-        <div style={styles.filename} title={item.filename}>{item.filename}</div>
+        <div style={styles.filenameBox}>
+          <div style={styles.filename} title={item.filename}>
+            {item.filename}
+          </div>
+          <div style={styles.size}>{formatBytes(item.size_bytes)}</div>
+        </div>
         <div style={{ ...styles.badge, background: color + '22', color }}>
           {label}
           {convStatus === 'running' && job?.step && ` · ${job.step}`}
         </div>
       </div>
-      <div style={styles.size}>{formatBytes(item.size_bytes)}</div>
+      {job?.params && <div style={styles.params}>{fmtParams(job.params)}</div>}
 
       {uploadStatus === 'uploading' && (
         <div style={styles.progressWrap}>
@@ -56,21 +57,24 @@ export function FileJobCard({ item, job, onViewResult }: FileJobCardProps) {
         </div>
       )}
 
-      {uploadStatus === 'error' && item.error && (
-        <div style={styles.errorText}>{item.error}</div>
-      )}
+      {uploadStatus === 'error' && item.error && <div style={styles.errorText}>{item.error}</div>}
 
-      {convStatus === 'error' && job?.error && (
-        <div style={styles.errorText}>{job.error}</div>
-      )}
+      {convStatus === 'error' && job?.error && <div style={styles.errorText}>{job.error}</div>}
 
       {convStatus === 'done' && item.job_id && (
-        <button style={styles.viewBtn} onClick={() => onViewResult(item.job_id!)}>
-          결과 비교 보기 →
-        </button>
+        <div style={styles.resultBox}>
+          <div style={styles.filenameBox}>
+            <div style={styles.filename} title={item.filename}>
+              → {item.job_id}.glb
+            </div>
+          </div>
+          <button style={styles.viewBtn} onClick={() => onViewResult(item.job_id!)}>
+            결과 보기
+          </button>
+        </div>
       )}
     </div>
-  )
+  );
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -81,14 +85,15 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '14px 16px',
     display: 'flex',
     flexDirection: 'column',
-    gap: 8,
+    gap: 8
   },
   header: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: 12
   },
+  filenameBox: { display: 'flex', gap: 8 },
   filename: {
     fontSize: 13,
     fontWeight: 600,
@@ -96,32 +101,32 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    flex: 1,
+    flex: 1
   },
   badge: {
     fontSize: 11,
     fontWeight: 600,
     padding: '2px 8px',
     borderRadius: 99,
-    flexShrink: 0,
+    flexShrink: 0
   },
   size: {
     fontSize: 12,
-    color: '#64748b',
+    color: '#64748b'
   },
   progressWrap: {
     position: 'relative',
     height: 20,
     background: '#0f172a',
     borderRadius: 4,
-    overflow: 'hidden',
+    overflow: 'hidden'
   },
   progressFill: {
     position: 'absolute',
     inset: 0,
     right: 'auto',
     background: '#6366f1',
-    transition: 'width 0.2s',
+    transition: 'width 0.2s'
   },
   progressText: {
     position: 'absolute',
@@ -130,7 +135,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: 11,
-    color: '#e2e8f0',
+    color: '#e2e8f0'
   },
   errorText: {
     fontSize: 11,
@@ -141,7 +146,7 @@ const styles: Record<string, React.CSSProperties> = {
     maxHeight: 60,
     overflow: 'auto',
     fontFamily: 'monospace',
-    whiteSpace: 'pre-wrap',
+    whiteSpace: 'pre-wrap'
   },
   viewBtn: {
     alignSelf: 'flex-start',
@@ -152,6 +157,22 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 6,
     fontSize: 12,
     fontWeight: 600,
-    cursor: 'pointer',
+    cursor: 'pointer'
   },
-}
+  resultBox: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12
+  },
+  params: {
+    fontSize: 10,
+    color: '#94a3b8',
+    fontFamily: 'monospace',
+    lineHeight: 1.4,
+    maxWidth: 520,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  }
+};

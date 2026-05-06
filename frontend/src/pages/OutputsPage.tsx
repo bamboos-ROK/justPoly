@@ -2,15 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { GLBInspector } from '../components/GLBInspector';
 import type { OutputFile } from '../types';
-
-function fmtSize(bytes: number): string {
-  if (bytes > 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  return `${(bytes / 1024).toFixed(0)} KB`;
-}
-
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleString('ko-KR');
-}
+import { fmtSize, fmtDate, fmtParams } from '../utils';
 
 export function OutputsPage() {
   const [outputs, setOutputs] = useState<OutputFile[]>([]);
@@ -38,19 +30,27 @@ export function OutputsPage() {
       {loading && <p style={styles.empty}>불러오는 중...</p>}
       {!loading && outputs.length === 0 && <p style={styles.empty}>완료된 결과물이 없습니다.</p>}
       <div style={styles.list}>
-        {outputs.map((o) => (
-          <div key={o.job_id} style={styles.card}>
-            <div style={styles.cardLeft}>
-              <div style={styles.filename}>{o.filename}</div>
-              <div style={styles.meta}>
-                {fmtSize(o.size_bytes)} · {fmtDate(o.created_at)}
+        {outputs.map((o) => {
+          const paramsText = fmtParams(o.params);
+          return (
+            <div key={o.job_id} style={styles.card}>
+              <div style={styles.cardLeft}>
+                <div style={styles.filename}>{o.job_id}.glb</div>
+                <div style={styles.meta}>
+                  {fmtSize(o.size_bytes)} · {fmtDate(o.created_at)}
+                </div>
+                {paramsText && (
+                  <div style={styles.params} title={paramsText}>
+                    {paramsText}
+                  </div>
+                )}
               </div>
+              <button style={styles.btn} onClick={() => setSelectedJob(o)}>
+                비교 보기
+              </button>
             </div>
-            <button style={styles.btn} onClick={() => setSelectedJob(o)}>
-              비교 보기
-            </button>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {selectedJob && (
@@ -59,6 +59,7 @@ export function OutputsPage() {
           title={selectedJob.filename}
           inputUrl={selectedJob.input_url || `/files/staging/${selectedJob.job_id}.glb`}
           outputUrl={selectedJob.output_url || `/files/output/${selectedJob.job_id}.glb`}
+          params={selectedJob.params}
           onClose={() => setSelectedJob(null)}
         />
       )}
@@ -80,9 +81,19 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'space-between'
   },
-  cardLeft: { display: 'flex', flexDirection: 'column', gap: 4 },
+  cardLeft: { display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 },
   filename: { fontSize: 14, fontWeight: 600, color: '#e2e8f0' },
   meta: { fontSize: 12, color: '#64748b' },
+  params: {
+    fontSize: 10,
+    color: '#94a3b8',
+    fontFamily: 'monospace',
+    lineHeight: 1.4,
+    maxWidth: 520,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  },
   btn: {
     padding: '8px 16px',
     background: '#6366f1',

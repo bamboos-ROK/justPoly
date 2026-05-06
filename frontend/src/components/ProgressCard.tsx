@@ -1,35 +1,41 @@
-import type { Job } from '../types'
+import type { Job } from '../types';
 
 interface Props {
-  job: Job
+  job: Job;
 }
 
 const STEP_LABELS: Record<string, string> = {
   extract: '1. Extract (Blender)',
   simplify: '2. Simplify (QEM)',
-  bake: '3. Bake & Export (Blender)',
-}
+  bake: '3. Bake & Export (Blender)'
+};
 
 const STATUS_COLOR: Record<string, string> = {
   pending: '#475569',
   running: '#22d3ee',
   done: '#22c55e',
-  error: '#ef4444',
-}
+  error: '#ef4444'
+};
 
 const STATUS_ICON: Record<string, string> = {
   pending: '○',
   running: '◌',
   done: '●',
-  error: '✕',
-}
+  error: '✕'
+};
 
 export function ProgressCard({ job }: Props) {
   return (
     <div style={styles.card}>
       <div style={styles.header}>
         <span style={{ color: STATUS_COLOR[job.status] }}>
-          {job.status === 'running' ? '처리 중...' : job.status === 'done' ? '완료' : job.status === 'error' ? '오류 발생' : '대기 중'}
+          {job.status === 'running'
+            ? '처리 중...'
+            : job.status === 'done'
+              ? '완료'
+              : job.status === 'error'
+                ? '오류 발생'
+                : '대기 중'}
         </span>
         <span style={styles.filename}>{job.input_filename}</span>
       </div>
@@ -41,7 +47,12 @@ export function ProgressCard({ job }: Props) {
               {STATUS_ICON[step.status]}
             </span>
             <div style={{ flex: 1 }}>
-              <div style={{ ...styles.stepName, color: step.status === 'pending' ? '#475569' : '#e2e8f0' }}>
+              <div
+                style={{
+                  ...styles.stepName,
+                  color: step.status === 'pending' ? '#475569' : '#e2e8f0'
+                }}
+              >
                 {STEP_LABELS[step.name] ?? step.name}
               </div>
               {step.log_tail && step.status === 'running' && (
@@ -52,11 +63,9 @@ export function ProgressCard({ job }: Props) {
         ))}
       </div>
 
-      {job.error && (
-        <pre style={styles.error}>{job.error}</pre>
-      )}
+      {job.error && <pre style={styles.error}>{job.error}</pre>}
     </div>
-  )
+  );
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -64,7 +73,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: '#1e293b',
     borderRadius: 10,
     padding: 20,
-    border: '1px solid #334155',
+    border: '1px solid #334155'
   },
   header: {
     display: 'flex',
@@ -72,7 +81,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     marginBottom: 16,
     fontSize: 14,
-    fontWeight: 600,
+    fontWeight: 600
   },
   filename: {
     color: '#94a3b8',
@@ -80,22 +89,22 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 240,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
+    whiteSpace: 'nowrap'
   },
   steps: {
     display: 'flex',
     flexDirection: 'column',
-    gap: 12,
+    gap: 12
   },
   step: {
     display: 'flex',
     gap: 12,
-    alignItems: 'flex-start',
+    alignItems: 'flex-start'
   },
   stepName: {
     fontSize: 13,
     fontWeight: 500,
-    lineHeight: 1.4,
+    lineHeight: 1.4
   },
   log: {
     marginTop: 6,
@@ -108,7 +117,7 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-all',
     maxHeight: 100,
-    overflowY: 'auto',
+    overflowY: 'auto'
   },
   error: {
     marginTop: 12,
@@ -121,6 +130,6 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-all',
     maxHeight: 160,
-    overflowY: 'auto',
-  },
-}
+    overflowY: 'auto'
+  }
+};

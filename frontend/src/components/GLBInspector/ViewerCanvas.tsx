@@ -1,46 +1,39 @@
-import { useEffect, useRef } from 'react'
-import type { ViewerHandle } from '../../hooks/useGLBViewer'
-import { useGLBViewer } from '../../hooks/useGLBViewer'
+import { useEffect, useRef } from 'react';
+import type { ViewerHandle } from '../../hooks/useGLBViewer';
+import { useGLBViewer } from '../../hooks/useGLBViewer';
+import { fmtSize } from '../../utils';
 
 interface Props {
-  glbUrl: string
-  label: string
-  onReady: (handle: ViewerHandle) => void
-  wireframe: boolean
-  showBBox: boolean
+  glbUrl: string;
+  label: string;
+  onReady: (handle: ViewerHandle) => void;
+  wireframe: boolean;
+  showBBox: boolean;
 }
 
 export function ViewerCanvas({ glbUrl, label, onReady, wireframe, showBBox }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const { handleRef, loaded, triCount, fileSizeBytes } = useGLBViewer(canvasRef, glbUrl)
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { handleRef, loaded, triCount, fileSizeBytes } = useGLBViewer(canvasRef, glbUrl);
 
   useEffect(() => {
-    handleRef.current?.setWireframe(wireframe)
-  }, [wireframe])
+    handleRef.current?.setWireframe(wireframe);
+  }, [wireframe]);
 
   useEffect(() => {
-    handleRef.current?.setBoundingBox(showBBox)
-  }, [showBBox])
+    handleRef.current?.setBoundingBox(showBBox);
+  }, [showBBox]);
 
   useEffect(() => {
-    if (loaded && handleRef.current) onReady(handleRef.current)
-  }, [loaded])
+    if (loaded && handleRef.current) onReady(handleRef.current);
+  }, [loaded]);
 
   return (
     <div style={styles.wrap}>
       <canvas ref={canvasRef} style={styles.canvas} />
       <div style={styles.overlay}>
         <span style={styles.labelBadge}>{label}</span>
-        {loaded && (
-          <span style={styles.trisBadge}>
-            {triCount.toLocaleString()} tris
-          </span>
-        )}
-        {fileSizeBytes !== null && (
-          <span style={styles.trisBadge}>
-            {fmtSize(fileSizeBytes)}
-          </span>
-        )}
+        {loaded && <span style={styles.trisBadge}>{triCount.toLocaleString()} tris</span>}
+        {fileSizeBytes !== null && <span style={styles.trisBadge}>{fmtSize(fileSizeBytes)}</span>}
       </div>
       {!loaded && (
         <div style={styles.loading}>
@@ -48,13 +41,7 @@ export function ViewerCanvas({ glbUrl, label, onReady, wireframe, showBBox }: Pr
         </div>
       )}
     </div>
-  )
-}
-
-function fmtSize(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  return `${bytes} B`
+  );
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -62,12 +49,12 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     position: 'relative',
     overflow: 'hidden',
-    background: '#111827',
+    background: '#111827'
   },
   canvas: {
     width: '100%',
     height: '100%',
-    display: 'block',
+    display: 'block'
   },
   overlay: {
     position: 'absolute',
@@ -75,7 +62,7 @@ const styles: Record<string, React.CSSProperties> = {
     left: 12,
     display: 'flex',
     gap: 8,
-    alignItems: 'center',
+    alignItems: 'center'
   },
   labelBadge: {
     background: 'rgba(0,0,0,0.6)',
@@ -84,7 +71,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     padding: '3px 8px',
     borderRadius: 4,
-    backdropFilter: 'blur(4px)',
+    backdropFilter: 'blur(4px)'
   },
   trisBadge: {
     background: 'rgba(0,0,0,0.5)',
@@ -92,7 +79,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 11,
     padding: '3px 8px',
     borderRadius: 4,
-    backdropFilter: 'blur(4px)',
+    backdropFilter: 'blur(4px)'
   },
   loading: {
     position: 'absolute',
@@ -102,6 +89,6 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     color: '#64748b',
     fontSize: 13,
-    background: '#111827',
-  },
-}
+    background: '#111827'
+  }
+};
