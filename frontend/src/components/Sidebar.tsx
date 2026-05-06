@@ -1,15 +1,15 @@
-import { NavLink } from 'react-router-dom'
-import { useStore } from '../store'
+import { NavLink } from 'react-router-dom';
+import { useStore } from '../store';
 
 export function Sidebar() {
-  const jobsById = useStore((s) => s.jobsById)
+  const jobsById = useStore((s) => s.jobsById);
   const hasActive = Object.values(jobsById).some(
     (j) => j.status === 'running' || j.status === 'queued'
-  )
+  );
 
   return (
     <aside style={styles.sidebar}>
-      <div style={styles.logo}>GLB Optimizer</div>
+      <div style={styles.logo}>JustPoly</div>
       <nav style={styles.nav}>
         <NavLink to="/progress" style={navStyle}>
           <span style={styles.icon}>⚙</span>
@@ -22,7 +22,7 @@ export function Sidebar() {
         </NavLink>
       </nav>
     </aside>
-  )
+  );
 }
 
 function navStyle({ isActive }: { isActive: boolean }): React.CSSProperties {
@@ -37,8 +37,8 @@ function navStyle({ isActive }: { isActive: boolean }): React.CSSProperties {
     fontWeight: 500,
     color: isActive ? '#e2e8f0' : '#94a3b8',
     background: isActive ? 'rgba(99,102,241,0.2)' : 'transparent',
-    position: 'relative',
-  }
+    position: 'relative'
+  };
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -50,7 +50,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     padding: '24px 12px',
-    flexShrink: 0,
+    flexShrink: 0
   },
   logo: {
     color: '#e2e8f0',
@@ -58,15 +58,15 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     padding: '0 8px',
     marginBottom: 24,
-    letterSpacing: '-0.02em',
+    letterSpacing: '-0.02em'
   },
   nav: {
     display: 'flex',
     flexDirection: 'column',
-    gap: 4,
+    gap: 4
   },
   icon: {
-    fontSize: 16,
+    fontSize: 16
   },
   badge: {
     position: 'absolute',
@@ -77,6 +77,6 @@ const styles: Record<string, React.CSSProperties> = {
     height: 8,
     borderRadius: '50%',
     background: '#22d3ee',
-    animation: 'pulse 1.5s infinite',
-  },
-}
+    animation: 'pulse 1.5s infinite'
+  }
+};

@@ -8,7 +8,7 @@ from .config import settings
 from .routers import upload, jobs, files
 from .services import pipeline as pipeline_service
 
-app = FastAPI(title="GLB Optimizer API")
+app = FastAPI(title="JustPoly API")
 
 app.add_middleware(
     CORSMiddleware,
