@@ -21,6 +21,44 @@ detect_python() {
   echo ""
 }
 
+# ── Blender 설치 확인 ───────────────────────────────────────────────────────
+step "Blender 설치 확인 중..."
+
+detect_blender() {
+  # 1) config.py 기본 하드코딩 경로 (macOS 기준)
+  DEFAULT_BLENDER="/Applications/Blender.app/Contents/MacOS/Blender"
+  if [ -x "$DEFAULT_BLENDER" ]; then
+    echo "$DEFAULT_BLENDER"
+    return
+  fi
+
+  # 2) .env 파일의 BLENDER_PATH 확인
+  if [ -f "$ROOT/.env" ]; then
+    ENV_BLENDER_PATH=$(grep -E '^BLENDER_PATH=' "$ROOT/.env" | cut -d '=' -f2- | tr -d '"' | tr -d "'")
+    if [ -n "$ENV_BLENDER_PATH" ] && [ -x "$ENV_BLENDER_PATH" ]; then
+      echo "$ENV_BLENDER_PATH"
+      return
+    fi
+  fi
+
+  echo ""
+}
+
+BLENDER=$(detect_blender)
+
+if [ -z "$BLENDER" ]; then
+  echo "  ✕ Blender를 찾을 수 없습니다.$BLENDER" >&2
+  echo "    확인 순서:" >&2
+  echo "    1. 기본 경로(MacOS): /Applications/Blender.app/Contents/MacOS/Blender" >&2
+  echo "    2. .env 의 BLENDER_PATH" >&2
+  echo "" >&2
+  echo "    Blender 설치: https://www.blender.org/download/" >&2
+  exit 1
+fi
+
+export BLENDER_PATH="$BLENDER"
+ok "Blender 확인 완료: $BLENDER"
+
 # ── 백엔드 의존성 체크 ───────────────────────────────────────────────────────
 step "백엔드 의존성 확인 중..."
 
@@ -85,6 +123,32 @@ BACKEND_PID=$!
 
 npm --prefix "$FRONTEND" run dev &
 FRONTEND_PID=$!
+
+# ── 프론트엔드 서버 준비 대기 ───────────────────────────────────────────────
+step "프론트엔드 서버 준비 대기 중..."
+
+until curl -s http://localhost:5173 >/dev/null; do
+  sleep 1
+done
+
+ok "프론트엔드 서버 준비 완료"
+
+# ── 브라우저 자동 실행 (OS 감지) ────────────────────────────────────────────
+step "브라우저 실행 중..."
+
+if command -v open >/dev/null 2>&1; then
+  # macOS
+  open http://localhost:5173
+elif command -v xdg-open >/dev/null 2>&1; then
+  # Linux
+  xdg-open http://localhost:5173 >/dev/null 2>&1 &
+elif command -v start >/dev/null 2>&1; then
+  # Windows (Git Bash 등)
+  start http://localhost:5173
+else
+  info "브라우저 자동 실행을 지원하지 않는 환경입니다."
+  info "수동 접속: http://localhost:5173"
+fi
 
 echo
 echo "  ✓ 백엔드:  http://localhost:8000"
