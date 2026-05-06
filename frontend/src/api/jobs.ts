@@ -4,7 +4,7 @@ import { jsonFetch } from './client'
 export function uploadGLB(file: File, onProgress: (pct: number) => void): Promise<{ job_id: string; input_url: string }> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    xhr.open('POST', `/upload?filename=${encodeURIComponent(file.name)}`)
+    xhr.open('POST', `/api/upload?filename=${encodeURIComponent(file.name)}`)
     xhr.setRequestHeader('Content-Type', 'application/octet-stream')
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress((e.loaded / e.total) * 100)
@@ -22,7 +22,7 @@ export function uploadGLB(file: File, onProgress: (pct: number) => void): Promis
 }
 
 export function startPipeline(job_id: string, params: Partial<PipelineParams> = {}): Promise<Job> {
-  return fetch('/jobs', {
+  return fetch('/api/jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ job_id, params }),
@@ -30,9 +30,9 @@ export function startPipeline(job_id: string, params: Partial<PipelineParams> = 
 }
 
 export function getJob(job_id: string): Promise<Job> {
-  return fetch(`/jobs/${job_id}`).then((r) => jsonFetch<Job>(r))
+  return fetch(`/api/jobs/${job_id}`).then((r) => jsonFetch<Job>(r))
 }
 
 export function listJobs(): Promise<Job[]> {
-  return fetch('/jobs').then((r) => jsonFetch<Job[]>(r))
+  return fetch('/api/jobs').then((r) => jsonFetch<Job[]>(r))
 }

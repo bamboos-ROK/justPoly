@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 import tempfile
 from collections import deque
@@ -51,8 +52,28 @@ def create_job(job_id: str, input_filename: str) -> JobStatus:
 def enqueue_job(job_id: str, params: PipelineParams) -> None:
     job = _jobs[job_id]
     job.status = "queued"
+    job.params = params
     _pending_params[job_id] = params
     _queue.put_nowait(job_id)
+
+
+def _write_output_metadata(job: JobStatus, output_glb_name: str, params: PipelineParams) -> None:
+    metadata_path = settings.output_dir / output_glb_name
+    metadata_path = metadata_path.with_suffix(".json")
+    payload = {
+        "job_id": job.job_id,
+        "filename": job.input_filename,
+        "input_url": f"/files/staging/{output_glb_name}",
+        "output_url": f"/files/output/{output_glb_name}",
+        "params": params.model_dump(mode="json"),
+        "created_at": (
+            job.finished_at or datetime.now(timezone.utc)
+        ).isoformat(),
+    }
+    metadata_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 async def start_worker() -> None:
@@ -141,6 +162,9 @@ async def run_pipeline_async(job_id: str, params: PipelineParams) -> None:
             job.status = "done"
             job.step = None
             job.output_url = f"/files/output/{output_fname}"
+            job.params = params
+            job.finished_at = datetime.now(timezone.utc)
+            _write_output_metadata(job, output_fname, params)
         else:
             job.steps[current_step_idx].status = "error"
             job.status = "error"
@@ -150,4 +174,5 @@ async def run_pipeline_async(job_id: str, params: PipelineParams) -> None:
         job.status = "error"
         job.error = str(exc)
     finally:
-        job.finished_at = datetime.now(timezone.utc)
+        if job.finished_at is None:
+            job.finished_at = datetime.now(timezone.utc)

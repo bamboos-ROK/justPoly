@@ -32,6 +32,7 @@ class JobStatus(BaseModel):
     step: Optional[str] = None
     steps: list[PipelineStep]
     input_filename: str
+    params: Optional[PipelineParams] = None
     output_url: Optional[str] = None
     error: Optional[str] = None
     started_at: Optional[datetime] = None
@@ -50,3 +51,4 @@ class OutputFile(BaseModel):
     output_url: str
     size_bytes: int
     created_at: datetime
+    params: Optional[PipelineParams] = None
