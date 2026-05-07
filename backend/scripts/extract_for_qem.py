@@ -35,10 +35,25 @@ def export_world_tri_mesh_obj(output_path: str):
         eval_obj = obj.evaluated_get(depsgraph)
         mesh = eval_obj.to_mesh()
 
-        # Triangulate
+        # Triangulate + Mesh Normalize (Stage 1)
         bm = bmesh.new()
         bm.from_mesh(mesh)
         bmesh.ops.triangulate(bm, faces=list(bm.faces))
+
+        before_norm = len(bm.faces)
+        bmesh.ops.dissolve_degenerate(bm, dist=1e-5, edges=list(bm.edges))
+        bmesh.ops.remove_doubles(bm, verts=list(bm.verts), dist=1e-6)
+        bm.faces.ensure_lookup_table()
+        non_tri = [f for f in bm.faces if len(f.verts) > 3]
+        if non_tri:
+            bmesh.ops.triangulate(bm, faces=non_tri)
+        bmesh.ops.recalc_face_normals(bm, faces=list(bm.faces))
+        print(
+            f"[Normalize] {before_norm} → {len(bm.faces)} tris "
+            f"(removed {before_norm - len(bm.faces)})",
+            flush=True,
+        )
+
         bm.to_mesh(mesh)
         bm.free()
         mesh.update()

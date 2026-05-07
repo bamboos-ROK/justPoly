@@ -20,10 +20,11 @@ _worker_task: asyncio.Task | None = None
 # stdout 패턴 → step index 매핑
 _STEP_MARKERS = {
     "extract_for_qem.py": 0,
-    "qem_simplify.py": 1,
-    "bake_export.py": 2,
+    "cull_interior.py": 1,
+    "qem_simplify.py": 2,
+    "bake_export.py": 3,
 }
-_STEP_NAMES = ["extract", "simplify", "bake"]
+_STEP_NAMES = ["normalize", "interior_removal", "qem_decimate", "uv_bake"]
 
 
 def get_job(job_id: str) -> Optional[JobStatus]:
@@ -44,9 +45,10 @@ def create_job(job_id: str, input_filename: str) -> JobStatus:
         job_id=job_id,
         status="uploading",
         steps=[
-            PipelineStep(name="extract", status="pending"),
-            PipelineStep(name="simplify", status="pending"),
-            PipelineStep(name="bake", status="pending"),
+            PipelineStep(name="normalize",        status="pending"),
+            PipelineStep(name="interior_removal", status="pending"),
+            PipelineStep(name="qem_decimate",     status="pending"),
+            PipelineStep(name="uv_bake",          status="pending"),
         ],
         input_filename=input_filename,
     )
@@ -112,7 +114,7 @@ async def run_pipeline_async(job_id: str, params: PipelineParams) -> None:
     job.status = "running"
     job.started_at = datetime.now(timezone.utc)
     job.steps[0].status = "running"
-    job.step = "extract"
+    job.step = "normalize"
 
     log_buffer: deque[str] = deque(maxlen=10)
     current_step_idx = 0

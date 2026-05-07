@@ -46,6 +46,8 @@ def main():
     output_glb = Path(args.output).resolve()
 
     qem_source = workdir / "qem_source.obj"
+    qem_culled = workdir / "qem_culled.obj"
+    face_visibility = workdir / "face_visibility.json"
     low_obj = workdir / "low.obj"
     baked_png = workdir / "baked_basecolor.png"
     normal_png = workdir / "baked_normal.png"
@@ -61,6 +63,16 @@ def main():
     ])
 
     require_file(qem_source, "QEM source OBJ")
+
+    run([
+        args.blender, "-b",
+        "--python", str(Path("cull_interior.py").resolve()),
+        "--",
+        "--input", str(qem_source),
+        "--output", str(qem_culled),
+    ])
+
+    require_file(qem_culled, "Culled OBJ")
 
     meta_path = workdir / "metadata.json"
     if meta_path.exists():
@@ -79,9 +91,10 @@ def main():
 
     run([
         sys.executable, str(Path("qem_simplify.py").resolve()),
-        "--input", str(qem_source),
+        "--input", str(qem_culled),
         "--output", str(low_obj),
         "--target-tris", str(args.target_tris),
+        "--visibility-scores", str(face_visibility),
     ])
 
     require_file(low_obj, "Low-poly OBJ")
