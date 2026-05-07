@@ -29,7 +29,7 @@ BLENDER_PATH=/path/to/blender
 프로젝트 루트에서 실행합니다.
 
 ```bash
-./run_webapp.sh
+bash ./run_webapp.sh
 ```
 
 스크립트가 백엔드/프론트엔드 의존성을 확인하고, 필요한 경우 자동 설치한 뒤 서버를 실행합니다.
