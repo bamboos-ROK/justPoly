@@ -51,6 +51,7 @@ API Docs: http://localhost:8000/docs
 - 파일별 업로드 진행률과 변환 상태 확인
 - 완료된 파일은 원본/결과 GLB를 나란히 비교
 - Outputs 페이지에서 완료된 결과물 다시 열람
+- Outputs 페이지에서 완료된 결과물 삭제
 
 ---
 
@@ -148,7 +149,8 @@ data/
 ├── staging/
 │   └── {job_id}.glb
 └── output/
-    └── {job_id}.glb
+    ├── {job_id}.glb
+    └── {job_id}.json
 ```
 
 예시:
@@ -156,21 +158,23 @@ data/
 ```text
 data/staging/chair_a1b2c3d4.glb
 data/output/chair_a1b2c3d4.glb
+data/output/chair_a1b2c3d4.json
 ```
 
 ---
 
 ## API
 
-| Method | Path                          | 설명                          |
-| ------ | ----------------------------- | ----------------------------- |
-| `POST` | `/upload?filename=x.glb`      | GLB 1개 업로드                |
-| `POST` | `/jobs`                       | 업로드된 job을 변환 큐에 등록 |
-| `GET`  | `/jobs`                       | 전체 job 상태 조회            |
-| `GET`  | `/jobs/{job_id}`              | 특정 job 상태 조회            |
-| `GET`  | `/outputs`                    | 완료된 결과 목록 조회         |
-| `GET`  | `/files/staging/{job_id}.glb` | 원본 GLB 파일                 |
-| `GET`  | `/files/output/{job_id}.glb`  | 결과 GLB 파일                 |
+| Method   | Path                          | 설명                          |
+| -------- | ----------------------------- | ----------------------------- |
+| `POST`   | `/api/upload?filename=x.glb`  | GLB 1개 업로드                |
+| `POST`   | `/api/jobs`                   | 업로드된 job을 변환 큐에 등록 |
+| `GET`    | `/api/jobs`                   | 전체 job 상태 조회            |
+| `GET`    | `/api/jobs/{job_id}`          | 특정 job 상태 조회            |
+| `GET`    | `/api/outputs`                | 완료된 결과 목록 조회         |
+| `DELETE` | `/api/outputs/{job_id}`       | 결과물 삭제                   |
+| `GET`    | `/files/staging/{job_id}.glb` | 원본 GLB 파일                 |
+| `GET`    | `/files/output/{job_id}.glb`  | 결과 GLB 파일                 |
 
 Job 상태:
 
@@ -190,12 +194,11 @@ justPoly/
 │   └── scripts/          # Blender/QEM 처리 스크립트
 ├── frontend/
 │   └── src/
-│       ├── pages/        # On Progress, Outputs
-│       ├── components/   # UploadZone, FileJobCard, GLBInspector
+│       ├── pages/
+│       ├── components/
 │       ├── api/
 │       └── store.ts
 ├── data/                 # 업로드/결과 파일 저장
-├── MULTI_FILE_REFACTOR_PRD.md
 └── run_webapp.sh
 ```
 
