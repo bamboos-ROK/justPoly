@@ -137,6 +137,8 @@ async def run_pipeline_async(job_id: str, params: PipelineParams) -> None:
                 cmd.append("--skip-high-poly-cleanup")
             if params.skip_cage:
                 cmd.append("--skip-cage")
+            if params.skip_normal_bake:
+                cmd.append("--skip-normal-bake")
 
             proc = await asyncio.create_subprocess_exec(
                 *cmd,

@@ -49,4 +49,5 @@ export interface PipelineParams {
   texture_size?: number
   skip_high_poly_cleanup: boolean
   skip_cage: boolean
+  skip_normal_bake: boolean
 }

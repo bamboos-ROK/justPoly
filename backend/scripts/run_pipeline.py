@@ -34,6 +34,7 @@ def main():
     parser.add_argument("--texture-ratio", type=float, default=0.5)
     parser.add_argument("--skip-high-poly-cleanup", action="store_true")
     parser.add_argument("--skip-cage", action="store_true")
+    parser.add_argument("--skip-normal-bake", action="store_true")
     parser.add_argument("--blender", default="blender")
     parser.add_argument("--workdir", default="_glb_opt_work")
     args = parser.parse_args()
@@ -47,6 +48,7 @@ def main():
     qem_source = workdir / "qem_source.obj"
     low_obj = workdir / "low.obj"
     baked_png = workdir / "baked_basecolor.png"
+    normal_png = workdir / "baked_normal.png"
 
     print(f"Working directory: {workdir}", flush=True)
 
@@ -95,10 +97,14 @@ def main():
         "--texture-size", str(args.texture_size),
     ]
     
+    if not args.skip_normal_bake:
+        bake_cmd += ["--normal-png", str(normal_png)]
     if args.skip_high_poly_cleanup:
         bake_cmd.append("--skip-high-poly-cleanup")
     if args.skip_cage:
         bake_cmd.append("--skip-cage")
+    if args.skip_normal_bake:
+        bake_cmd.append("--skip-normal-bake")
 
     run(bake_cmd)
 

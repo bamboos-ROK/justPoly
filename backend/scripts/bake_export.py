@@ -14,6 +14,8 @@ def parse_args():
     parser.add_argument("--low-obj", required=True)
     parser.add_argument("--output-glb", required=True)
     parser.add_argument("--baked-png", required=True)
+    parser.add_argument("--normal-png", default=None)
+    parser.add_argument("--skip-normal-bake", action="store_true")
     parser.add_argument("--texture-size", type=int, default=4096)
     parser.add_argument("--uv-angle-deg", type=float, default=66.0)
     parser.add_argument("--uv-margin", type=float, default=0.005)
@@ -128,36 +130,71 @@ def cleanup_high_poly(high_objs, skip=False):
         print(f"[Cleanup] {obj.name} 완료")
 
 
+# ── Shade Smooth ──────────────────────────────────────────────────────────────
+
+def apply_shade_smooth(obj):
+    """UV 생성 후 적용해야 tangent basis seam artifact 최소화."""
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.shade_smooth()
+
+
 # ── Bake 전략 ─────────────────────────────────────────────────────────────────
 
-def create_bake_material(low_obj, image):
+def create_bake_material(low_obj, color_image, normal_image):
     """베이크 중 순환 의존성 방지: 이미지 노드는 active만 유지, BSDF 연결은 베이크 후 수행."""
     mat = bpy.data.materials.new("BakedMaterial")
     mat.use_nodes = True
 
     nodes = mat.node_tree.nodes
-    tex = nodes.new(type="ShaderNodeTexImage")
-    tex.name = "BakedBaseColor"
-    tex.image = image
+
+    color_tex = nodes.new(type="ShaderNodeTexImage")
+    color_tex.name = "BakedBaseColor"
+    color_tex.image = color_image
+
+    if normal_image is not None:
+        normal_tex = nodes.new(type="ShaderNodeTexImage")
+        normal_tex.name = "BakedNormal"
+        normal_tex.image = normal_image
+        normal_tex.image.colorspace_settings.name = "Non-Color"
 
     low_obj.data.materials.clear()
     low_obj.data.materials.append(mat)
 
     for node in nodes:
         node.select = False
-    tex.select = True
-    nodes.active = tex
 
 
-def _connect_baked_image(low_obj):
-    """베이크 완료 후 이미지를 Base Color에 연결 (GLB export용)."""
+def _set_active_image_node(low_obj, node_name: str):
+    mat = low_obj.data.materials[0]
+    nodes = mat.node_tree.nodes
+    for node in nodes:
+        node.select = False
+    target = nodes.get(node_name)
+    if target is None:
+        raise RuntimeError(f"Image node '{node_name}' not found in material")
+    target.select = True
+    nodes.active = target
+
+
+def _connect_baked_material(low_obj):
+    """베이크 완료 후 BaseColor + Normal Map을 BSDF에 연결 (GLB export용)."""
     mat = low_obj.data.materials[0]
     nodes = mat.node_tree.nodes
     links = mat.node_tree.links
     bsdf = next((n for n in nodes if n.type == "BSDF_PRINCIPLED"), None)
-    tex = nodes.get("BakedBaseColor")
-    if bsdf and tex:
-        links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+
+    color_tex = nodes.get("BakedBaseColor")
+    if bsdf and color_tex:
+        links.new(color_tex.outputs["Color"], bsdf.inputs["Base Color"])
+
+    normal_tex = nodes.get("BakedNormal")
+    if bsdf and normal_tex:
+        nm_node = nodes.new(type="ShaderNodeNormalMap")
+        nm_node.space = 'TANGENT'
+        links.new(normal_tex.outputs["Color"], nm_node.inputs["Color"])
+        links.new(nm_node.outputs["Normal"], bsdf.inputs["Normal"])
 
 
 def _bake_diffuse(high_objs, low_obj, max_ray_distance, bake_margin,
@@ -184,7 +221,7 @@ def _bake_diffuse(high_objs, low_obj, max_ray_distance, bake_margin,
         result = bpy.ops.object.bake(**bake_kwargs)
         if "FINISHED" not in result:
             raise RuntimeError(f"bake returned: {result}")
-        print("[Bake] 완료" + (" (cage)" if use_cage else ""))
+        print("[Bake] BaseColor 완료" + (" (cage)" if use_cage else ""))
     except Exception as e:
         if use_cage:
             print(f"[Bake] Cage bake 실패: {e} — fallback")
@@ -199,25 +236,79 @@ def _bake_diffuse(high_objs, low_obj, max_ray_distance, bake_margin,
             raise
 
 
-def bake_basecolor(high_objs, low_obj, image, baked_png, bake_margin, max_ray_distance, samples,
-                   skip_high_poly_cleanup=False, use_cage=False, cage_extrusion=0.0):
+def _bake_normal(high_objs, low_obj, max_ray_distance, bake_margin,
+                 use_cage=False, cage_extrusion=0.0):
+    """Tangent Space Normal Map bake."""
+    bpy.context.scene.render.bake.normal_space = 'TANGENT'
+
+    bpy.ops.object.select_all(action="DESELECT")
+    for obj in high_objs:
+        obj.select_set(True)
+    low_obj.select_set(True)
+    bpy.context.view_layer.objects.active = low_obj
+
+    bake_kwargs = dict(
+        type="NORMAL",
+        use_selected_to_active=True,
+        max_ray_distance=max_ray_distance,
+        margin=bake_margin,
+    )
+    if use_cage and cage_extrusion > 0:
+        bake_kwargs["use_cage"] = True
+        bake_kwargs["cage_extrusion"] = cage_extrusion
+
+    try:
+        result = bpy.ops.object.bake(**bake_kwargs)
+        if "FINISHED" not in result:
+            raise RuntimeError(f"bake returned: {result}")
+        print("[Bake] Normal 완료" + (" (cage)" if use_cage else ""))
+    except Exception as e:
+        if use_cage:
+            print(f"[Bake] Normal cage bake 실패: {e} — fallback")
+            bpy.ops.object.bake(
+                type="NORMAL",
+                use_selected_to_active=True,
+                max_ray_distance=max_ray_distance,
+                margin=bake_margin,
+            )
+        else:
+            raise
+
+
+def bake_textures(high_objs, low_obj,
+                  color_image, baked_png,
+                  normal_image, normal_png,
+                  bake_margin, max_ray_distance, samples,
+                  skip_high_poly_cleanup=False,
+                  use_cage=False, cage_extrusion=0.0,
+                  skip_normal_bake=False):
     bpy.context.scene.render.engine = "CYCLES"
     bpy.context.scene.cycles.samples = samples
 
     cleanup_high_poly(high_objs, skip=skip_high_poly_cleanup)
-    create_bake_material(low_obj, image)
+    create_bake_material(low_obj, color_image, normal_image)
 
+    _set_active_image_node(low_obj, "BakedBaseColor")
     _bake_diffuse(high_objs, low_obj, max_ray_distance, bake_margin,
                   use_cage=use_cage, cage_extrusion=cage_extrusion)
 
-    _connect_baked_image(low_obj)
+    if not skip_normal_bake:
+        _set_active_image_node(low_obj, "BakedNormal")
+        _bake_normal(high_objs, low_obj, max_ray_distance, bake_margin,
+                     use_cage=use_cage, cage_extrusion=cage_extrusion)
 
-    image.filepath_raw = baked_png
-    image.file_format = "PNG"
-    image.save()
+    _connect_baked_material(low_obj)
 
-    # GLB export 시 image 포함 안정성을 위해 pack
-    image.pack()
+    color_image.filepath_raw = baked_png
+    color_image.file_format = "PNG"
+    color_image.save()
+    color_image.pack()
+
+    if not skip_normal_bake and normal_image and normal_png:
+        normal_image.filepath_raw = normal_png
+        normal_image.file_format = "PNG"
+        normal_image.save()
+        normal_image.pack()
 
 
 def export_glb(low_obj, output_glb):
@@ -233,10 +324,20 @@ def export_glb(low_obj, output_glb):
         use_selection=True,
         export_materials="EXPORT",
         export_image_format="AUTO",
+        export_tangents=True,
     )
 
 
 def main():
+    try:
+        _main()
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
+def _main():
     args = parse_args()
 
     clear_scene()
@@ -249,13 +350,26 @@ def main():
 
     low_obj = load_simple_obj(args.low_obj, "LowPoly")
     create_uv(low_obj, args.uv_angle_deg, args.uv_margin)
+    apply_shade_smooth(low_obj)
 
-    image = bpy.data.images.new(
+    color_image = bpy.data.images.new(
         name="BakedBaseColor",
         width=args.texture_size,
         height=args.texture_size,
         alpha=True,
     )
+
+    if not args.skip_normal_bake:
+        normal_image = bpy.data.images.new(
+            name="BakedNormal",
+            width=args.texture_size,
+            height=args.texture_size,
+            alpha=False,
+        )
+        normal_image.colorspace_settings.name = "Non-Color"
+    else:
+        normal_image = None
+        print("[Main] Normal Bake 스킵")
 
     diag = bbox_diag(high_objs + [low_obj])
     max_ray_distance = diag * args.ray_factor
@@ -263,11 +377,14 @@ def main():
 
     print(f"[Main] diag={diag:.4f}, ray={max_ray_distance:.6f}, cage={cage_extrusion:.6f}")
 
-    bake_basecolor(
+    bake_textures(
         high_objs=high_objs,
         low_obj=low_obj,
-        image=image,
+        color_image=color_image,
         baked_png=args.baked_png,
+        normal_image=normal_image,
+        normal_png=args.normal_png,
+        skip_normal_bake=args.skip_normal_bake,
         bake_margin=args.bake_margin,
         max_ray_distance=max_ray_distance,
         samples=args.samples,

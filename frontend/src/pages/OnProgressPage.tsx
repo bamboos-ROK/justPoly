@@ -28,7 +28,8 @@ export function OnProgressPage() {
     tris_ratio: 0.1,
     texture_ratio: 0.5,
     skip_high_poly_cleanup: false,
-    skip_cage: false
+    skip_cage: false,
+    skip_normal_bake: false
   });
 
   const uploadQueueRef = useRef<string[]>([]);
@@ -258,6 +259,14 @@ export function OnProgressPage() {
                 onChange={(e) => setParams((p) => ({ ...p, skip_cage: e.target.checked }))}
               />
               Cage Baking 스킵
+            </label>
+            <label style={styles.checkLabel}>
+              <input
+                type="checkbox"
+                checked={params.skip_normal_bake ?? false}
+                onChange={(e) => setParams((p) => ({ ...p, skip_normal_bake: e.target.checked }))}
+              />
+              Normal Map 스킵
             </label>
           </div>
         </div>

@@ -19,6 +19,7 @@ export function fmtParams(params?: PipelineParams | null): string | null {
   if (params.texture_size) parts.push(`${params.texture_size}px`);
   if (params.skip_high_poly_cleanup) parts.push('cleanup skip');
   if (params.skip_cage) parts.push('cage skip');
+  if (params.skip_normal_bake) parts.push('normal skip');
   return parts.join(' · ');
 }
 

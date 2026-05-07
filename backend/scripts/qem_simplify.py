@@ -37,12 +37,20 @@ def main():
     ms.meshing_remove_unreferenced_vertices()
     ms.compute_normal_per_vertex()
 
+    # 🔥 추가 1: curvature 기반 중요도 계산
+    ms.compute_scalar_by_discrete_curvature_per_vertex(
+        curvaturetype=0
+    )
+
+    # 🔥 추가 2: principal direction (feature line 힌트)
+    ms.compute_curvature_principal_directions_per_vertex()
+
     ms.meshing_decimation_quadric_edge_collapse(
         targetfacenum=args.target_tris,
         preservetopology=True,
         preservenormal=True,
         planarquadric=False,
-        qualitythr=0.9
+        qualitythr=0.7
     )
 
     ms.meshing_remove_duplicate_vertices()

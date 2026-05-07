@@ -13,6 +13,7 @@ class PipelineParams(BaseModel):
     texture_size: Optional[int] = None
     skip_high_poly_cleanup: bool = False
     skip_cage: bool = False
+    skip_normal_bake: bool = False
 
 
 class StartPipelineRequest(BaseModel):
