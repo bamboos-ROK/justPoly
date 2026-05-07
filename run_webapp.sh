@@ -115,6 +115,40 @@ else
 fi
 [ ! -f "$FRONTEND/node_modules/.package_stamp" ] && touch "$FRONTEND/node_modules/.package_stamp"
 
+# ── 기존 프로세스 확인 ──────────────────────────────────────────────────────
+step "포트 사용 현황 확인 중..."
+
+OCCUPIED_PORTS=()
+for port in 8000 5173; do
+  pids=$(lsof -ti:"$port" 2>/dev/null || true)
+  if [ -n "$pids" ]; then
+    OCCUPIED_PORTS+=("$port")
+    info "포트 $port 사용 중 (PID: $pids)"
+  fi
+done
+
+if [ ${#OCCUPIED_PORTS[@]} -gt 0 ]; then
+  echo
+  printf "  위 포트를 점유 중인 프로세스를 종료하고 계속하시겠습니까? [Y/n] "
+  read -r answer
+  case "$answer" in
+    [yY]|[yY][eE][sS])
+      for port in "${OCCUPIED_PORTS[@]}"; do
+        pids=$(lsof -ti:"$port" 2>/dev/null || true)
+        [ -n "$pids" ] && echo "$pids" | xargs kill -9 2>/dev/null || true
+        info "포트 $port 프로세스 종료"
+      done
+      ok "포트 정리 완료"
+      ;;
+    *)
+      echo "  취소되었습니다." >&2
+      exit 1
+      ;;
+  esac
+else
+  ok "사용 중인 포트 없음"
+fi
+
 # ── 서버 실행 ────────────────────────────────────────────────────────────────
 step "서버 시작..."
 
