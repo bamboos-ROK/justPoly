@@ -143,7 +143,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'rgba(239,68,68,0.1)',
     borderRadius: 4,
     padding: '4px 8px',
-    maxHeight: 60,
+    maxHeight: 360,
     overflow: 'auto',
     fontFamily: 'monospace',
     whiteSpace: 'pre-wrap'
