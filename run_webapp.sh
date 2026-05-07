@@ -51,7 +51,7 @@ ok "Blender 확인 완료: $BLENDER"
 
 # ── Python 감지 ──────────────────────────────────────────────────────────────
 detect_python() {
-  for cmd in python3.12 python3.11 python3.10 python3; do
+  for cmd in python3.14 python3.13 python3.12 python3.11 python3.10 python3; do
     if command -v "$cmd" &>/dev/null; then
       echo "$cmd"; return
     fi

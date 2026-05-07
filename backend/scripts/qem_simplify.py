@@ -1,21 +1,20 @@
 import argparse
 from pathlib import Path
 
-import open3d as o3d
+import pymeshlab
 
 
-def write_obj(path: str, mesh: o3d.geometry.TriangleMesh):
+def write_obj(path: str, ms: pymeshlab.MeshSet):
+    m = ms.current_mesh()
+    vertices = m.vertex_matrix()  # (N, 3) float64
+    faces = m.face_matrix()       # (F, 3) int32
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-
-    vertices = mesh.vertices
-    triangles = mesh.triangles
-
     with path.open("w", encoding="utf-8") as f:
         for v in vertices:
             f.write(f"v {v[0]:.9g} {v[1]:.9g} {v[2]:.9g}\n")
-        for tri in triangles:
-            f.write(f"f {tri[0] + 1} {tri[1] + 1} {tri[2] + 1}\n")
+        for tri in faces:
+            f.write(f"f {tri[0]+1} {tri[1]+1} {tri[2]+1}\n")
 
 
 def main():
@@ -25,31 +24,38 @@ def main():
     parser.add_argument("--target-tris", type=int, required=True)
     args = parser.parse_args()
 
-    mesh = o3d.io.read_triangle_mesh(args.input)
+    ms = pymeshlab.MeshSet()
+    ms.load_new_mesh(args.input)
 
-    if len(mesh.triangles) == 0:
+    original_faces = ms.current_mesh().face_number()
+    if original_faces == 0:
         raise RuntimeError("Input mesh has no triangles.")
 
-    mesh.remove_duplicated_vertices()
-    mesh.remove_duplicated_triangles()
-    mesh.remove_degenerate_triangles()
-    mesh.remove_unreferenced_vertices()
-    mesh.compute_vertex_normals()
+    ms.meshing_remove_duplicate_vertices()
+    ms.meshing_remove_duplicate_faces()
+    ms.meshing_remove_null_faces()
+    ms.meshing_remove_unreferenced_vertices()
+    ms.compute_normal_per_vertex()
 
-    low = mesh.simplify_quadric_decimation(
-        target_number_of_triangles=args.target_tris
+    ms.meshing_decimation_quadric_edge_collapse(
+        targetfacenum=args.target_tris,
+        preservetopology=True,
+        preservenormal=True,
+        planarquadric=False,
+        qualitythr=0.9
     )
 
-    low.remove_duplicated_vertices()
-    low.remove_duplicated_triangles()
-    low.remove_degenerate_triangles()
-    low.remove_unreferenced_vertices()
-    low.compute_vertex_normals()
+    ms.meshing_remove_duplicate_vertices()
+    ms.meshing_remove_duplicate_faces()
+    ms.meshing_remove_null_faces()
+    ms.meshing_remove_unreferenced_vertices()
+    ms.compute_normal_per_vertex()
 
-    write_obj(args.output, low)
+    simplified_faces = ms.current_mesh().face_number()
+    write_obj(args.output, ms)
 
-    print(f"Original triangles: {len(mesh.triangles)}")
-    print(f"Simplified triangles: {len(low.triangles)}")
+    print(f"Original triangles: {original_faces}")
+    print(f"Simplified triangles: {simplified_faces}")
     print(f"Output: {args.output}")
 
 
