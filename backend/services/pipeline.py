@@ -151,6 +151,7 @@ async def run_pipeline_async(job_id: str, params: PipelineParams) -> None:
 
             async for line_bytes in proc.stdout:  # type: ignore[union-attr]
                 line = line_bytes.decode("utf-8", errors="replace").rstrip()
+                print(line, flush=True)
                 log_buffer.append(line)
 
                 for marker, step_idx in _STEP_MARKERS.items():
