@@ -35,6 +35,7 @@ def main():
     parser.add_argument("--skip-high-poly-cleanup", action="store_true")
     parser.add_argument("--skip-cage", action="store_true")
     parser.add_argument("--skip-normal-bake", action="store_true")
+    parser.add_argument("--ray-factor", type=float, default=0.008)
     parser.add_argument("--blender", default="blender")
     parser.add_argument("--workdir", default="_glb_opt_work")
     args = parser.parse_args()
@@ -112,6 +113,7 @@ def main():
     
     if not args.skip_normal_bake:
         bake_cmd += ["--normal-png", str(normal_png)]
+    bake_cmd += ["--ray-factor", str(args.ray_factor)]
     if args.skip_high_poly_cleanup:
         bake_cmd.append("--skip-high-poly-cleanup")
     if args.skip_cage:

@@ -3,6 +3,7 @@ import math
 import sys
 from pathlib import Path
 
+import bmesh
 import bpy
 from mathutils import Vector
 
@@ -20,10 +21,10 @@ def parse_args():
     parser.add_argument("--uv-angle-deg", type=float, default=66.0)
     parser.add_argument("--uv-margin", type=float, default=0.005)
     parser.add_argument("--bake-margin", type=int, default=16)
-    parser.add_argument("--ray-factor", type=float, default=0.01)
+    parser.add_argument("--ray-factor", type=float, default=0.008)
     parser.add_argument("--samples", type=int, default=64)
     parser.add_argument("--skip-high-poly-cleanup", action="store_true")
-    parser.add_argument("--cage-factor", type=float, default=0.005)
+    parser.add_argument("--cage-factor", type=float, default=0.008)
     parser.add_argument("--skip-cage", action="store_true")
     return parser.parse_args(argv)
 
@@ -198,7 +199,7 @@ def _connect_baked_material(low_obj):
 
 
 def _bake_diffuse(high_objs, low_obj, max_ray_distance, bake_margin,
-                  use_cage=False, cage_extrusion=0.0):
+                  use_cage=False, cage_extrusion=0.0, cage_obj_name=None):
     """DIFFUSE + COLOR pass: 재질 조작 없이 high poly albedo를 직접 베이크."""
     bpy.ops.object.select_all(action="DESELECT")
     for obj in high_objs:
@@ -213,15 +214,21 @@ def _bake_diffuse(high_objs, low_obj, max_ray_distance, bake_margin,
         max_ray_distance=max_ray_distance,
         margin=bake_margin,
     )
-    if use_cage and cage_extrusion > 0:
-        bake_kwargs["use_cage"] = True
-        bake_kwargs["cage_extrusion"] = cage_extrusion
+    if use_cage:
+        if cage_obj_name:
+            bake_kwargs["use_cage"] = True
+            bake_kwargs["cage_object"] = cage_obj_name
+            bake_kwargs["cage_extrusion"] = 0
+        elif cage_extrusion > 0:
+            bake_kwargs["use_cage"] = True
+            bake_kwargs["cage_extrusion"] = cage_extrusion
 
+    mode = " (adaptive cage)" if cage_obj_name else " (cage)" if use_cage else ""
     try:
         result = bpy.ops.object.bake(**bake_kwargs)
         if "FINISHED" not in result:
             raise RuntimeError(f"bake returned: {result}")
-        print("[Bake] BaseColor 완료" + (" (cage)" if use_cage else ""))
+        print(f"[Bake] BaseColor 완료{mode}")
     except Exception as e:
         if use_cage:
             print(f"[Bake] Cage bake 실패: {e} — fallback")
@@ -237,7 +244,7 @@ def _bake_diffuse(high_objs, low_obj, max_ray_distance, bake_margin,
 
 
 def _bake_normal(high_objs, low_obj, max_ray_distance, bake_margin,
-                 use_cage=False, cage_extrusion=0.0):
+                 use_cage=False, cage_extrusion=0.0, cage_obj_name=None):
     """Tangent Space Normal Map bake."""
     bpy.context.scene.render.bake.normal_space = 'TANGENT'
 
@@ -253,15 +260,21 @@ def _bake_normal(high_objs, low_obj, max_ray_distance, bake_margin,
         max_ray_distance=max_ray_distance,
         margin=bake_margin,
     )
-    if use_cage and cage_extrusion > 0:
-        bake_kwargs["use_cage"] = True
-        bake_kwargs["cage_extrusion"] = cage_extrusion
+    if use_cage:
+        if cage_obj_name:
+            bake_kwargs["use_cage"] = True
+            bake_kwargs["cage_object"] = cage_obj_name
+            bake_kwargs["cage_extrusion"] = 0
+        elif cage_extrusion > 0:
+            bake_kwargs["use_cage"] = True
+            bake_kwargs["cage_extrusion"] = cage_extrusion
 
+    mode = " (adaptive cage)" if cage_obj_name else " (cage)" if use_cage else ""
     try:
         result = bpy.ops.object.bake(**bake_kwargs)
         if "FINISHED" not in result:
             raise RuntimeError(f"bake returned: {result}")
-        print("[Bake] Normal 완료" + (" (cage)" if use_cage else ""))
+        print(f"[Bake] Normal 완료{mode}")
     except Exception as e:
         if use_cage:
             print(f"[Bake] Normal cage bake 실패: {e} — fallback")
@@ -280,7 +293,7 @@ def bake_textures(high_objs, low_obj,
                   normal_image, normal_png,
                   bake_margin, max_ray_distance, samples,
                   skip_high_poly_cleanup=False,
-                  use_cage=False, cage_extrusion=0.0,
+                  use_cage=False, cage_extrusion=0.0, cage_obj_name=None,
                   skip_normal_bake=False):
     bpy.context.scene.render.engine = "CYCLES"
     bpy.context.scene.cycles.samples = samples
@@ -290,12 +303,14 @@ def bake_textures(high_objs, low_obj,
 
     _set_active_image_node(low_obj, "BakedBaseColor")
     _bake_diffuse(high_objs, low_obj, max_ray_distance, bake_margin,
-                  use_cage=use_cage, cage_extrusion=cage_extrusion)
+                  use_cage=use_cage, cage_extrusion=cage_extrusion,
+                  cage_obj_name=cage_obj_name)
 
     if not skip_normal_bake:
         _set_active_image_node(low_obj, "BakedNormal")
         _bake_normal(high_objs, low_obj, max_ray_distance, bake_margin,
-                     use_cage=use_cage, cage_extrusion=cage_extrusion)
+                     use_cage=use_cage, cage_extrusion=cage_extrusion,
+                     cage_obj_name=cage_obj_name)
 
     _connect_baked_material(low_obj)
 
@@ -326,6 +341,45 @@ def export_glb(low_obj, output_glb):
         export_image_format="AUTO",
         export_tangents=True,
     )
+
+
+# ── Cage ─────────────────────────────────────────────────────────────────────
+
+def _compute_adaptive_offset(vert, cage_extrusion):
+    """인접 face normal 발산도 + min edge length로 vertex별 safe cage offset 계산."""
+    faces = vert.link_faces
+    if len(faces) < 2:
+        return cage_extrusion
+    normals = [f.normal for f in faces]
+    min_dot = min(n1.dot(n2) for n1 in normals for n2 in normals if n1 is not n2)
+    scale = max(0.0, min(1.0, (min_dot + 1) / 2))
+    min_edge = min((e.calc_length() for e in vert.link_edges), default=float("inf"))
+    hard_limit = min_edge * 0.2
+    floor_val = cage_extrusion * 0.05 * max(0.0, (min_dot + 1) / 2)
+    return max(min(cage_extrusion * scale, hard_limit), floor_val)
+
+
+def build_cage_mesh(low_obj, cage_extrusion, name="Cage"):
+    """per-vertex adaptive offset으로 cage 생성 (곡률 높은 영역은 offset 감소)."""
+    bm = bmesh.new()
+    bm.from_mesh(low_obj.data)
+    bm.normal_update()
+
+    for vert in bm.verts:
+        offset = _compute_adaptive_offset(vert, cage_extrusion)
+        vert.co += vert.normal * offset
+
+    cage_mesh = bpy.data.meshes.new(name + "_mesh")
+    bm.to_mesh(cage_mesh)
+    bm.free()
+    cage_mesh.update()
+
+    cage_obj = bpy.data.objects.new(name, cage_mesh)
+    bpy.context.collection.objects.link(cage_obj)
+    cage_obj.hide_render = True
+    return cage_obj
+
+
 
 
 def main():
@@ -377,6 +431,14 @@ def _main():
 
     print(f"[Main] diag={diag:.4f}, ray={max_ray_distance:.6f}, cage={cage_extrusion:.6f}")
 
+    cage_obj_name = None
+    bake_cage_obj = None
+
+    if not args.skip_cage:
+        bake_cage_obj = build_cage_mesh(low_obj, cage_extrusion, name="BakeCage")
+        cage_obj_name = bake_cage_obj.name
+        print(f"[Main] adaptive cage 생성 완료: {cage_obj_name}")
+
     bake_textures(
         high_objs=high_objs,
         low_obj=low_obj,
@@ -391,6 +453,7 @@ def _main():
         skip_high_poly_cleanup=args.skip_high_poly_cleanup,
         use_cage=not args.skip_cage,
         cage_extrusion=cage_extrusion,
+        cage_obj_name=cage_obj_name,
     )
 
     export_glb(low_obj, args.output_glb)
